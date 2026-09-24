@@ -1,0 +1,13 @@
+.venv/
+.cache/
+__pycache__/
+*.pyc
+.DS_Store
+weights/*.pt
+samples/*.mp4
+samples/*.MP4
+outputs/
+.streamlit/secrets.toml
+*.mp4
+*.MP4
+*.analysis.json
