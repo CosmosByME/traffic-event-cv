@@ -1,15 +1,15 @@
-# Implementation status — event tracking update
+# Implementation status — HTML website and event tracking
 
-Implemented and checked locally on September 24, 2026:
+Implemented and checked locally through September 26, 2026:
 
 - Python 3.12 virtual environment with pinned direct dependencies.
 - Official YOLO11n checkpoint with recorded SHA256; offline inference smoke passed.
 - ByteTrack adapter, normalized trajectories, ten configurable event rules.
 - Optional causal risk estimator with explicit finite [0,1] bounds and labeled exports.
-- MP4 upload website, JSON calibration, event table/timeline, object counts, occupancy heatmap, risk curve, download results and optional annotated video.
+- HTML/CSS/JavaScript website with a Python model API: streamed MP4 uploads, JSON calibration, event table/timeline, object counts, risk curve, download results and optional annotated video.
 - Batch processing, annotated sample export, Docker packaging.
-- 30 tests passed, covering event lifecycle, signal rules, missing observations, display-only predictions, risk bounds, output validation, video pipeline and website behavior.
-- Browser verified at http://127.0.0.1:8501.
+- 34 tests passed after cleanup, covering event lifecycle, signal rules, missing observations, display-only predictions, risk bounds, output validation, video pipeline and website behavior.
+- Browser verified at http://127.0.0.1:8080. The superseded Streamlit UI has been removed; use the root requirements.txt and Dockerfile for the website.
 
 Actual C3896 review: 450 frames / 15.015 seconds resized to 1280×720; updated YOLO/ByteTrack analysis took 7.90 seconds on CPU, excluding extraction and annotated export. Risk range 0–0.534913. Predictions and annotated review are under outputs/tracking-review/. This is not a target-GPU or two-pass organizer benchmark. No annotated ground-truth accuracy or ID-switch score is available.
 

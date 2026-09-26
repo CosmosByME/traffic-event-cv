@@ -2,7 +2,7 @@
 
 Python 3.11 or 3.12 recommended. This is a functional starter implementation, not a validated competition submission. Official sample videos, camera.md, run_submission.py and evaluate.py have not yet been provided. Do not replace the official harness/evaluator with local approximations.
 
-The local `.venv` and official YOLO11n weights are already installed in this workspace. Start here with `.venv/bin/streamlit run app.py`. Use the setup steps below on another machine. The `.venv` and weights are excluded from Git; the download script verifies the committed SHA256.
+The local `.venv` and official YOLO11n weights are already installed in this workspace. Start the HTML website with `.venv/bin/python website/server.py` and open http://127.0.0.1:8080. Its HTML/CSS/JavaScript frontend lives in `website/public/`, with the model API in `website/server.py`. See `website/README.md` for setup and upload details. The `.venv` and weights are excluded from Git; the download script verifies the committed SHA256.
 
 ## Install and run
 
@@ -11,7 +11,7 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python scripts/download_weights.py
-streamlit run app.py
+python website/server.py
 ```
 
 The one-time download fetches YOLO11n from the official Ultralytics assets release and prints its SHA256. Bundle the weights or run `sh weights/download.sh` before offline evaluation. Inference checks local weights first and does not fetch them. Set `TRAFFIC_WEIGHTS` to an alternate local checkpoint. The detector explicitly selects ByteTrack and disables dependency auto-installation.
@@ -34,7 +34,7 @@ python evaluate.py --pred predictions_samples.json --validate-only
 
 ## Calibration
 
-Edit configs/camera.json using the website's Camera setup tab. Coordinates are normalized [x/width, y/height]; tracked points use bounding-box bottom centers. Set calibrated=true only after specifying road, crosswalks, queue_zones, and lanes accurately. Lane direction is a nonzero vector in image coordinates (positive y points down). Assign each lane a `group` such as `northbound` so congestion requires occupancy in all lanes of that direction. Defaults make no event predictions; a generic scene is not safe to assume.
+Edit the selected profile under the HTML website's "Edit camera configuration" control, then download it to save the settings. Coordinates are normalized [x/width, y/height]; tracked points use bounding-box bottom centers. Set calibrated=true only after specifying road, crosswalks, queue_zones, and lanes accurately. Lane direction is a nonzero vector in image coordinates (positive y points down). Assign each lane a `group` such as `northbound` so congestion requires occupancy in all lanes of that direction. Defaults make no event predictions; a generic scene is not safe to assume.
 
 Example lane: `{"polygon": [[0.1,0.2],[0.4,0.2],[0.5,1],[0.1,1]], "direction": [0,-1], "group":"northbound"}`.
 
@@ -93,11 +93,11 @@ Additional config arrays default empty:
 
 ## Required repository layout
 
-The submission interface stays at root (`solution.py`), implementation stays under `src/`, dependencies in `requirements.txt`, checkpoints in `weights/`, and sample predictions at `predictions_samples.json`. `configs/`, `scripts/`, `tests/`, and `app.py` are additional support files. The unchanged official `run_submission.py` and `evaluate.py` must be added at root when supplied; neither is fabricated here. `dev_run.py` is explicitly a development runner. No notebook is required to run inference.
+The submission interface stays at root (`solution.py`), implementation stays under `src/`, dependencies in `requirements.txt`, checkpoints in `weights/`, and sample predictions at `predictions_samples.json`. `configs/`, `scripts/`, `tests/`, and `website/` are additional support folders. The root `Dockerfile` runs the HTML website. The unchanged official `run_submission.py` and `evaluate.py` must be added at root when supplied; neither is fabricated here. `dev_run.py` is explicitly a development runner. No notebook is required to run inference.
 
 Part B is off by default. `risk_enabled=true` enables an experimental closest-approach heuristic in normalized image space. This is not metric time-to-collision or calibrated probability. RiskEstimator only consumes received frames, with independent detector/tracker state; no Part A output or video files are accessed. Budget Part A and B together: enabling risk can approximately double detector work under the official harness.
 
-The demo accepts MP4 up to 100 MB, 120 seconds, and 4K. It returns actual detections, event timeline, counts, occupancy heatmap, risk curve if enabled, and JSON downloads. Temporary uploaded files are removed after processing. Public hosting and sample annotated videos remain release tasks. Run one CPU/GPU worker initially; concurrent inference can exhaust memory.
+The HTML website accepts MP4 up to 3 GB (3072 MB), 10 minutes, and 4K. It streams uploads to temporary disk storage and serves video playback, track overlays, event timelines, count/risk charts and downloads. Its limits are in website/server.py. Recent jobs expire after two hours, server shutdown, or eviction beyond four retained jobs. See website/README.md. Public hosting and official sample visualizations remain release tasks.
 
 ## Reproducibility and attribution
 
