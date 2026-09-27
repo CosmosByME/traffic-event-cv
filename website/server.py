@@ -20,8 +20,8 @@ from src.config import load_config, validate_config
 
 MAX_BYTES = 3 * 1024**3
 MAX_SECONDS = 600
-PROFILES = {'camera.json': 'C3896 daytime framing · reviewed geometry v2',
-            'uncalibrated.json': 'Other camera · configure before detecting events'}
+PROFILES = {'camera.json': 'Day time camera',
+            'uncalibrated.json': 'Night time camera'}
 
 
 class Jobs:
