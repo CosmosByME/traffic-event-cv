@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-python scripts/download_weights.py
+python scripts/download_weights.py --fire-smoke

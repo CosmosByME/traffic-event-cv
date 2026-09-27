@@ -1,48 +1,75 @@
-# RoadLens — WIUT traffic-event baseline
+# RoadLens — WIUT traffic-event submission
 
-Python 3.11 or 3.12 recommended. This is a functional starter implementation, not a validated competition submission. Official sample videos, camera.md, run_submission.py and evaluate.py have not yet been provided. Do not replace the official harness/evaluator with local approximations.
+## Run on another computer
 
-The local `.venv` and official YOLO11n weights are already installed in this workspace. Start the HTML website with `.venv/bin/python website/server.py` and open http://127.0.0.1:8080. Its HTML/CSS/JavaScript frontend lives in `website/public/`, with the model API in `website/server.py`. See `website/README.md` for setup and upload details. The `.venv` and weights are excluded from Git; the download script verifies the committed SHA256.
-
-## Install and run
+Open a terminal in this repository's root folder (`traffic-event-cv`, the folder containing `solution.py`). Use Python **3.11 or 3.12** with pip. Place the supplied test MP4 files in `samples/` (or substitute their folder path). Only these two commands are needed:
 
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
-python scripts/download_weights.py
-python website/server.py
+python run_submission.py --videos samples --out predictions.json
 ```
 
-The one-time download fetches YOLO11n from the official Ultralytics assets release and prints its SHA256. Bundle the weights or run `sh weights/download.sh` before offline evaluation. Inference checks local weights first and does not fetch them. Set `TRAFFIC_WEIGHTS` to an alternate local checkpoint. The detector explicitly selects ByteTrack and disables dependency auto-installation.
+Installation needs internet, or pre-provisioned dependency wheels. Inference is offline. The two model checkpoints are included in the repository (about 12 MB total): **no download script, manual camera edit, GPU flag, website server, or extra launch script is required**. Keep `pip` and `python` pointed at the same Python installation. A fresh virtual environment is recommended when other projects already use that installation, but is not a runtime dependency.
 
-Run all supplied videos locally:
+The organizers' exact run command is:
 
 ```bash
-python dev_run.py --videos samples --out outputs/predictions_samples.json
-python dev_run.py --videos samples --out outputs/predictions_samples.json --render
+python run_submission.py --videos /data/test --out predictions.json
+```
+
+On Windows, replace `/data/test` with the actual video folder, quoting paths with spaces. Output contains both event intervals and per-frame risk scores. Reusing an output filename overwrites that JSON. The output's parent directory must already exist (this is behavior of the unchanged official runner).
+
+**Device:** the bundled camera config uses `auto`: NVIDIA CUDA GPU 0 when available, otherwise CPU. Requirements select the pinned CUDA 12.8 PyTorch build on Windows/Linux x86-64 and native wheels on macOS. NVIDIA machines need a compatible installed driver; the app does not install system drivers. See [official PyTorch installation versions](https://pytorch.org/get-started/previous-versions/#v280). CPU fallback supports functional testing but is not guaranteed to meet the organizers' time limit on full-resolution videos.
+
+**Success:** each video should print `OK`, with no entries in its `log.errors`. Inspect this: the official runner can exit successfully even when an individual video failed or exceeded its budget. Its combined Part A + B budget remains the official 3× duration; no limits were relaxed.
+
+## Submission layout
+
+- `solution.py`: required `CLASSES`, `detect_events`, and causal `RiskEstimator`.
+- `run_submission.py`, `evaluate.py`: byte-identical copies of the supplied organizer files; do not modify.
+- `requirements.txt`, `Dockerfile`: environment setup. Docker defaults to the official run command.
+- `weights/`: both local checkpoints, checksums and attribution.
+- `src/`: detector/tracker, temporal event rules, risk and runtime setup.
+- `configs/`: bundled C3896 scene geometry and tracker settings.
+- `predictions_samples.json`: existing sample output; **currently stale**, regenerate before final submission.
+- `website/`: separate optional website, not required by the organizer inference command.
+- `scripts/`, `tests/`: developer tools, not additional setup steps.
+- `samples/camera.md`: team-authored scene notes; the revised PDF does not require this file.
+
+The project folder is the Git repository root; it must not be wrapped in an extra folder inside the uploaded repository. Large road videos, virtual environments, caches and diagnostic outputs remain ignored. The two named model files are explicitly allowed in Git; make sure they are included when committing/pushing or sending the folder to a teammate.
+
+## Optional developer checks
+
+Packaging verification: clean Python 3.12 install and relocated-package inference
+passed on this Mac. A 20-second resized C3896 clip took 47.1s for both official
+passes (60s budget), with zero runner/validator errors. This is not a Windows/T4
+or full-resolution performance guarantee. All 60 tests pass.
+
+These are not needed to run the submission:
+
+```bash
+python evaluate.py --pred predictions.json --validate-only
 python -m unittest discover -s tests -v
-python scripts/smoke_inference.py
+python scripts/check_submission.py --video samples/C3896.MP4
 ```
 
-`dev_run.py` is a development tool. It does not enforce organizer time limits and is not a replacement for their harness. Once supplied, put the unchanged official files at the repository root, then run:
+The last command copies the inference package to a temporary unrelated directory and runs both official passes on a 20-second resized clip under the original time budget. It checks deployment plumbing, not accuracy or full-resolution performance.
 
-```bash
-python run_submission.py --videos samples --out predictions_samples.json
-python evaluate.py --pred predictions_samples.json --validate-only
-```
+To start the separate website after installation: `python website/server.py`, then visit http://127.0.0.1:8080. See `website/README.md`. Website hosting is separate from the offline submission.
+
+For local annotated playback, `dev_run.py` remains available, but it is not the submission entry point. `scripts/download_weights.py --fire-smoke` is retained only as an optional repair/source-provenance tool; inference never downloads weights.
 
 ## Calibration
 
-Edit the selected profile under the HTML website's "Edit camera configuration" control, then download it to save the settings. Coordinates are normalized [x/width, y/height]; tracked points use bounding-box bottom centers. Set calibrated=true only after specifying road, crosswalks, queue_zones, and lanes accurately. Lane direction is a nonzero vector in image coordinates (positive y points down). Assign each lane a `group` such as `northbound` so congestion requires occupancy in all lanes of that direction. Defaults make no event predictions; a generic scene is not safe to assume.
+Edit the selected profile under the HTML website's "Edit camera configuration" control, then download it to save the settings. Coordinates are normalized [x/width, y/height]; tracked points use bounding-box bottom centers. Set calibrated=true only after specifying road, crosswalks, queue_zones, and lanes accurately. Lane direction is a nonzero vector in image coordinates (positive y points down). Assign each lane a `group` such as `northbound` so congestion requires occupancy in all lanes of that direction. The default is now the reviewed C3896 profile. Use configs/uncalibrated.json for a different camera; never apply C3896 geometry to an unrelated view.
 
 Example lane: `{"polygon": [[0.1,0.2],[0.4,0.2],[0.5,1],[0.1,1]], "direction": [0,-1], "group":"northbound"}`.
 
-Set device to `cpu`, `mps`, or `0` for CUDA GPU 0. CPU is the portable default. Set `TRAFFIC_CAMERA` to another JSON path for batch/organizer inference. Image-plane speed thresholds require tuning for perspective. A new camera requires new geometry.
+Set device to `auto`, `cpu`, `mps`, or `0` for CUDA GPU 0. `auto` is the packaged default; it selects CUDA if available, otherwise CPU. Set `TRAFFIC_CAMERA` to another JSON path for batch/organizer inference. Image-plane speed thresholds require tuning for perspective. A new camera requires new geometry.
 
 ## Implemented scope
 
-YOLO11n pretrained on COCO → ByteTrack → trajectories → ten configurable rules:
+YOLO11n pretrained on COCO → ByteTrack → trajectories and camera geometry, plus a separate fire/smoke detector. All 14 IDs now have implementation paths; this is not a claim of complete real-world coverage or validated accuracy.
 
 * stopped_vehicle: persistent stationary track on the road outside signal queue regions.
 * wrong_way: sustained motion opposite a configured lane direction.
@@ -55,22 +82,27 @@ YOLO11n pretrained on COCO → ByteTrack → trajectories → ten configurable r
 * solid_line_crossing: track crosses a finite configured solid-line segment; ends when projected contact corners cross it.
 * illegal_turn / illegal_u_turn: verified prohibited entry → maneuver → exit sequences.
 
-All 14 official IDs are exposed in solution.py. Accident, near_miss, road_obstacle and fire_smoke remain unsupported. These rules are heuristics, not verified legal findings. Finite geometry, contact-point approximation, signal visibility, occlusion and boundaries require validation. No sample/hidden-set accuracy is claimed.
+* accident: experimental approach + contact proxy + abrupt braking, ending on participant stopping/disappearance. Does not cover single-vehicle impacts against untracked fixed objects.
+* near_miss: experimental approaching conflict + abrupt evasion + separation without observed contact proxy. Ordinary braking/occlusion can still fool it.
+* road_obstacle: persistent recognized COCO animals/items inside the road; carried items are suppressed. Arbitrary debris outside those learned categories is not reliably detected.
+* fire_smoke: learned fire/smoke detections from a pinned YOLOv8n checkpoint, with road-region and temporal confirmation. The checkpoint is from a different domain and needs road-camera validation.
+
+These are event candidates, not verified legal findings. Finite geometry, contact-point approximation, signal visibility, occlusion and boundaries require validation. No sample/hidden-set accuracy is claimed. Flags `collision_rules_enabled`, `obstacle_detection_enabled`, and `fire_smoke_enabled` default to true but require a calibrated road. Fire/smoke weights are required when that detector is enabled; missing weights fail explicitly. Disable a feature only if you intend to submit/demo reduced coverage.
 
 ## Use your C3896 video
 
 ```bash
-.venv/bin/python dev_run.py --videos samples --camera configs/C3896.draft.json --out predictions_samples.json --render
+.venv/bin/python dev_run.py --videos samples --camera configs/C3896.json --out predictions_samples.json --render
 ```
 
-This draft was drawn from your video: road, crossings, refuge exclusions and signal queue area. It enables stopped_vehicle, jaywalking, failure_to_yield and experimental risk. It deliberately leaves lane directions, signal mapping, solid lines and prohibited turns unset; rules depending on those do not activate. Review the geometry before trusting the predictions. Do not apply this camera profile to unrelated footage or the hidden camera without checking the view.
+Reviewed C3896 geometry includes road boundaries, three crossings, refuge/curb exclusions, the signal queue approach and three near-side lane cores. The curb car is no longer inside the far crossing. Signal ownership, solid-line rules and prohibited turns remain unset; their dependent rules are disabled. Lane coverage is partial and event accuracy is unvalidated. See samples/camera.md for observations and limitations. The old C3896.draft.json is retained only as a historical comparison.
 
-For the official interface, use `TRAFFIC_CAMERA=configs/C3896.draft.json` only when the input matches this camera, or copy reviewed settings into configs/camera.json before packaging. Otherwise solution.py keeps using the uncalibrated default. Ensure packaged configuration and predictions_samples.json agree before submission.
+The official interface now uses the matching C3896 geometry in configs/camera.json by default. TRAFFIC_CAMERA can override it. Generate review overlays with `python scripts/preview_camera.py --video samples/C3896.MP4`. Ensure packaged configuration and regenerated predictions_samples.json agree before submission.
 
 To iterate quickly using existing saved detections:
 
 ```bash
-.venv/bin/python scripts/replay_events.py outputs/C3896.analysis.json --camera configs/C3896.draft.json --out outputs/C3896.events-v2.analysis.json
+.venv/bin/python scripts/replay_events.py outputs/C3896.analysis.json --camera configs/C3896.json --out outputs/C3896.events-v2.analysis.json
 ```
 
 Replay does not improve old YOLO detections/IDs or extract missing signal crops. Run dev_run.py again to apply detector/tracker improvements. The sampled analysis carries exact config and a replay flag; older runtime metadata is retained and is not replay runtime.
@@ -80,6 +112,24 @@ Replay does not improve old YOLO detections/IDs or extract missing signal crops.
 Detector confidence 0.10 lets ByteTrack use low-confidence detections for recovery; new tracks still require 0.35. The buffer is measured in seconds at the actual sampling rate. Event states bridge only brief missing observations (0.5 seconds); visible contrary evidence closes an event. Amber predicted boxes last at most 0.5 seconds and are for display only. They never enter rules, counts or risk. Lower confidence can add false associations; validation on your footage is still needed.
 
 Every official risk row is **[timestamp_seconds, score_0_to_1]**. For example `[12.5, 0.7]` means score 0.7 at time 12.5 seconds. Scores are explicitly finite and clamped at every output boundary, with time-based smoothing. The demo has a labeled risk CSV. Clamping guarantees format, not probability calibration.
+
+Run `python scripts/check_risk.py predictions_samples.json` (or any downloaded predictions/full-analysis JSON) to audit every score. The saved C3896 outputs checked on September 26 contain 10,200 rows, scores 0–0.760849, and timestamps up to 340.306633 seconds: no score-range violation was found. Analysis and website downloads now include a named `risk_summary`. The browser rejects malformed/out-of-range risk rather than silently clipping it. New risk requires confident, sustained closing evidence and rejects ordinary co-moving pairs; it remains uncalibrated.
+
+Full analysis includes `raw_events` and `event_evidence` so you can distinguish a long per-track event from several overlapping same-class events merged for the official schema. Yield detection requires a witnessed crossing entry and displacement while a pedestrian is present. Tracks first seen inside a crossing can therefore be missed; inaccurate crossing boundaries still cause errors.
+
+## Update the Windows GPU machine
+
+After pulling the committed changes, run from the project root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe scripts/download_weights.py --fire-smoke
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe scripts/check_risk.py predictions_samples.json
+.\.venv\Scripts\python.exe website/server.py
+```
+
+The requirements install CUDA 12.8 PyTorch 2.8.0/torchvision 0.23.0 on Windows/Linux x86-64; `device: auto` selects an available CUDA GPU without profile edits. Rerun actual inference to obtain the new obstacle/fire detections and confidence scores; replaying old tracks cannot create missing detections. `python scripts/smoke_hazards.py --video samples/C3896.MP4` runs a six-second two-model integration check, not an accuracy benchmark.
 
 ## Camera-dependent rule configuration
 
@@ -111,9 +161,9 @@ Record exact model SHA256, hardware, evaluation commands, development labels, an
 
 ## Remaining release gates
 
-1. Add the official starter files, sample videos, and camera.md.
-2. Annotate sample events, calibrate geometry, tune rules, and compare per-class scores using the official evaluator.
-3. Add reliable implementations of remaining event classes as time permits.
+1. Verify the friend's fresh checkout includes both bundled weight files; run the official command and inspect its per-video errors.
+2. Annotate sample events, validate the reviewed geometry, tune rules, and compare per-class scores using the official evaluator.
+3. Validate/tune the four experimental hazard paths with real positives and negatives; confirm upstream fire-model dataset-license provenance.
 4. Export annotated playback for every sample video; publish real EDA, results, failure examples, and report.
 5. Measure two-pass Part A + B runtime on a T4-class machine; keep below 3× video duration with margin and weights below 5 GB.
 6. Clean install/offline/repeat-run checks, public demo deployment, complete team details, final tagged commit.

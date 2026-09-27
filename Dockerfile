@@ -5,4 +5,4 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 8080
-CMD ["python", "website/server.py", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "run_submission.py", "--videos", "/data/test", "--out", "predictions.json"]

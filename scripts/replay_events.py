@@ -8,10 +8,13 @@ from src.config import load_config
 from src.events import RuleEngine
 from src.risk import smooth_score, bounded_score
 from src.tracking import DisplayTracker
-from src.output import validate_prediction
+from src.output import validate_prediction, risk_summary
 
 
 def replay(data, config):
+    # Preserve the actual sampling cadence stored with detections, rather than
+    # pretending that replay changed how frequently the detector was run.
+    config = dict(config, sample_fps=data.get('config',{}).get('sample_fps',config['sample_fps']))
     engine, display = RuleEngine(config), DisplayTracker(config['display_hold_seconds'])
     sampled = []
     last_t,score = -1/config['sample_fps'],0.0
@@ -30,7 +33,10 @@ def replay(data, config):
         risk.append([round(t,6),round(bounded_score(sampled[index][1] if sampled else 0),6)])
     data.update(events=engine.finish(data['meta']['duration']),risk=risk,config=config,
                 calibrated=config.get('calibrated',False),risk_enabled=config['risk_enabled'],
-                risk_columns=['timestamp_seconds','score_0_to_1'])
+                risk_columns=['timestamp_seconds','score_0_to_1'],risk_summary=risk_summary(risk))
+    data['raw_events'] = engine.raw_events
+    data['event_evidence'] = engine.yield_rule.evidence+engine.hazards.evidence
+    data['replay_limitations'] = 'Uses saved detections only: cannot add missing fire/smoke, obstacle classes or confidence scores.'
     data['replayed_from_saved_detections'] = True
     validate_prediction(data['events'],data['risk'],data['meta']['duration'])
     return data

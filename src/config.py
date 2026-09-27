@@ -26,7 +26,7 @@ def validate_config(c):
             raise ValueError(f'{key} must be a list.')
     if c.get('calibrated') and len(c['road']) < 3:
         raise ValueError('A calibrated camera needs a road polygon.')
-    for key in ('calibrated', 'risk_enabled'):
+    for key in ('calibrated', 'risk_enabled', 'fire_smoke_enabled', 'collision_rules_enabled', 'obstacle_detection_enabled'):
         if key in c and not isinstance(c[key], bool):
             raise ValueError(f'{key} must be true or false.')
     polygons = [c['road']] + c['crosswalks'] + c['queue_zones'] + c['excluded_zones']
@@ -71,12 +71,19 @@ def validate_config(c):
                     min_event_seconds=0.5, merge_gap_seconds=0.3, congestion_seconds=5,
                     congestion_min_vehicles=4, risk_enabled=False, event_gap_seconds=0.5,
                     display_hold_seconds=0.5, track_buffer_seconds=2.0, crosswalk_margin=0.0)
+    defaults.update(event_confidence=.25, risk_confidence=.35, risk_confirmation_seconds=.4,
+                    yield_min_displacement_boxes=.35, hazard_confidence=.6,
+                    hazard_confirmation_seconds=.2, fire_confirmation_seconds=1.0,
+                    obstacle_confirmation_seconds=1.0, fire_smoke_enabled=True,
+                    collision_rules_enabled=True, obstacle_detection_enabled=True)
     for key, value in defaults.items():
         c.setdefault(key, value)
     for key in ('sample_fps', 'stopped_seconds', 'stationary_speed', 'wrong_way_seconds',
                 'min_event_seconds', 'congestion_seconds', 'congestion_min_vehicles',
-                'event_gap_seconds','display_hold_seconds','track_buffer_seconds'):
-        if not math.isfinite(float(c[key])) or float(c[key]) <= 0:
+                'event_gap_seconds','display_hold_seconds','track_buffer_seconds',
+                'risk_confirmation_seconds','yield_min_displacement_boxes',
+                'hazard_confirmation_seconds','fire_confirmation_seconds','obstacle_confirmation_seconds'):
+        if isinstance(c[key],bool) or not isinstance(c[key],(int,float)) or not math.isfinite(c[key]) or c[key] <= 0:
             raise ValueError(f'{key} must be positive and finite.')
     if not 0 < float(c['confidence']) <= 1 or not 0 <= float(c['merge_gap_seconds']) <= 2:
         raise ValueError('Invalid confidence or merge gap.')
@@ -84,4 +91,7 @@ def validate_config(c):
         raise ValueError('image_size must be an integer between 128 and 1920.')
     if not 0 <= float(c['crosswalk_margin']) <= .05:
         raise ValueError('crosswalk_margin must be between 0 and .05.')
+    for key in ('event_confidence', 'risk_confidence', 'hazard_confidence'):
+        if not isinstance(c[key], (int,float)) or not 0 <= c[key] <= 1:
+            raise ValueError(f'{key} must be a number in [0,1].')
     return c

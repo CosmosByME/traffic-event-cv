@@ -9,13 +9,18 @@ from .events import RuleEngine
 from .risk import bounded_score, smooth_score
 from .tracking import DisplayTracker
 from .signals import SignalReader
+from .output import validate_prediction, risk_summary
 
 
 class Detector:
     def __init__(self, config):
+        from .runtime import configure_runtime, verify_weights
+        config = configure_runtime(config)
         weights = Path(os.environ.get('TRAFFIC_WEIGHTS', ROOT / 'weights/yolo11n.pt'))
         if not weights.is_file():
-            raise FileNotFoundError(f'Missing local weights: {weights}. Run python scripts/download_weights.py once with internet.')
+            raise FileNotFoundError(f'Missing bundled weights: {weights}. Obtain the complete repository/package; inference is offline.')
+        if weights.resolve() == (ROOT / 'weights/yolo11n.pt').resolve():
+            verify_weights(weights, '0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1')
         settings = ROOT / '.cache/ultralytics'
         settings.mkdir(parents=True,exist_ok=True)
         os.environ.setdefault('YOLO_CONFIG_DIR',str(settings))
@@ -30,10 +35,17 @@ class Detector:
         torch.use_deterministic_algorithms(True, warn_only=True)
         self.model = YOLO(str(weights))
         self.c = config
+        self.fire = None
+        if config.get('calibrated') and config['fire_smoke_enabled']:
+            from .fire import FireDetector
+            self.fire = FireDetector(config)
 
     def step(self, frame):
+        classes = [0,1,2,3,5,7]
+        if self.c['obstacle_detection_enabled']:
+            classes += [14,15,16,17,18,19,20,21,22,23,24,26,28,39,56]
         result = self.model.track(frame, persist=True, tracker=str(ROOT/'configs/bytetrack.yaml'),
-                                 classes=[0, 1, 2, 3, 5, 7], conf=self.c['confidence'],
+                                 classes=classes, conf=self.c['confidence'],
                                  imgsz=self.c['image_size'], device=self.c['device'], verbose=False)[0]
         # Ultralytics constructs ByteTrack at 30 FPS even on sampled frames.
         # Convert the requested lifetime in seconds to actual update counts.
@@ -41,19 +53,22 @@ class Detector:
             tracker.max_time_lost = max(1,round(self.c['track_buffer_seconds']*self.c['sample_fps']))
         boxes = result.boxes
         if boxes is None or boxes.id is None:
-            return []
+            return self.fire.step(frame) if self.fire else []
         h, w = frame.shape[:2]
         output = []
-        for box, ident, cls in zip(boxes.xyxy.cpu().tolist(), boxes.id.cpu().tolist(), boxes.cls.cpu().tolist()):
+        for box, ident, cls, confidence in zip(boxes.xyxy.cpu().tolist(), boxes.id.cpu().tolist(), boxes.cls.cpu().tolist(), boxes.conf.cpu().tolist()):
             x1, y1, x2, y2 = box
             output.append(dict(id=int(ident), **{'class': result.names[int(cls)]},
-                               point=[(x1+x2)/(2*w), y2/h], box=[x1/w, y1/h, x2/w, y2/h]))
+                               point=[(x1+x2)/(2*w), y2/h], box=[x1/w, y1/h, x2/w, y2/h],confidence=confidence))
+        if self.fire:
+            output.extend(self.fire.step(frame))
         return output
 
 
 def analyze(video_path, config=None, progress=None):
     import cv2
-    c = config or load_config()
+    from .config import validate_config
+    c = validate_config(config) if config is not None else load_config()
     cap = cv2.VideoCapture(str(video_path))
     started = time.perf_counter()
     try:
@@ -96,7 +111,14 @@ def analyze(video_path, config=None, progress=None):
         elapsed = time.perf_counter()-started
         if progress:
             progress(1.0)
-        return dict(events=engine.finish(duration), risk=risk, tracks=tracks, counts=counts,
+        events = engine.finish(duration)
+        validate_prediction(events,risk,duration)
+        return dict(analysis_version=3,events=events, risk=risk, tracks=tracks, counts=counts,
+                    raw_events=engine.raw_events,event_evidence=engine.yield_rule.evidence+engine.hazards.evidence,
+                    risk_summary=risk_summary(risk),
+                    model_status=dict(collision_rules='experimental image-plane rules',
+                                      obstacle_detection=c['obstacle_detection_enabled'],
+                                      fire_smoke=c['fire_smoke_enabled'] and c.get('calibrated',False)),
                     meta=dict(fps=fps, duration=duration, width=width, height=height, frames=i,
                               elapsed=elapsed, realtime_factor=elapsed/duration),
                     calibrated=bool(c.get('calibrated')), risk_enabled=bool(c.get('risk_enabled')),

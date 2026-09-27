@@ -4,6 +4,10 @@ from collections import defaultdict, deque
 from itertools import combinations
 from .risk import bounded_score
 from .road_rules import RoadRules
+from .yield_rule import YieldRule
+from .risk import PersistentRisk
+from .tracking import overlap
+from .hazards import HazardRules, ROAD_USERS
 
 
 def inside(p, polygon):
@@ -40,7 +44,10 @@ def merge_events(events, duration, gap=0.3, minimum=0.5):
     for label, spans in by_label.items():
         merged = []
         for s, e in sorted(spans):
-            if merged and s <= merged[-1][1] + gap:
+            # Do not join distinct crossing visits just because they are close.
+            # Genuine overlaps still merge as required by the official format.
+            merge_gap = 0 if label == 'failure_to_yield' else gap
+            if merged and s <= merged[-1][1] + merge_gap:
                 merged[-1][1] = max(e, merged[-1][1])
             else:
                 merged.append([s, e])
@@ -57,13 +64,51 @@ class RuleEngine:
         self.last_t = None
         self.road_rules = RoadRules(config)
         self.last_seen = {}
+        self.yield_rule = YieldRule(config)
+        self.risk_state = PersistentRisk(config)
+        self.last_objects = {}
+        self.raw_events = []
+        self.hazards = HazardRules(config)
 
     def step(self, observations, t, signals=None):
         """Observations contain id, class, point (normalized bottom center), box."""
         if self.last_t is not None and t <= self.last_t:
             raise ValueError('Timestamps must increase.')
         self.last_t = t
-        observations = [o for o in observations if not o.get('predicted',False)]
+        observations = [o for o in observations if not o.get('predicted',False)
+                        and o.get('confidence', 1.0) >= self.c['event_confidence']]
+        # Duplicate IDs/boxes and gross tracker teleports must not become motion evidence.
+        clean = []
+        for obj in sorted(observations, key=lambda o: o.get('confidence', 1.0), reverse=True):
+            if any(obj['id'] == other['id'] or (obj['class'] == other['class']
+                   and overlap(obj['box'], other['box']) > .85) for other in clean):
+                continue
+            previous = self.last_objects.get(obj['id'])
+            if previous:
+                last, old = previous
+                scale = max(.01, old['box'][2]-old['box'][0], obj['box'][2]-obj['box'][0])
+                if old['class'] != obj['class'] or (t-last <= self.c['event_gap_seconds']
+                        and math.dist(old['point'], obj['point']) > 2*scale):
+                    self.history.pop(obj['id'], None)
+                    self.yield_rule.previous.pop(obj['id'], None)
+                    for key in list(self.yield_rule.visits):
+                        if key[0] == obj['id']:
+                            self.yield_rule.close(key, last)
+                    self.road_rules.previous.pop(obj['id'], None)
+                    for key in list(self.hazards.pairs):
+                        if obj['id'] in key:
+                            del self.hazards.pairs[key]
+                    for key in list(self.active):
+                        if key[1] == obj['id']:
+                            start, end, threshold = self.active.pop(key)
+                            if end-start >= threshold:
+                                self.completed.append([start, end, key[0]])
+            clean.append(obj)
+            self.last_objects[obj['id']] = (t, obj)
+        observations = clean
+        for ident, (last, _) in list(self.last_objects.items()):
+            if t-last > self.c['event_gap_seconds']:
+                del self.last_objects[ident]
         present = {o['id'] for o in observations}
         for ident in present:
             self.last_seen[ident] = t
@@ -85,7 +130,7 @@ class RuleEngine:
             speed = math.hypot(*v)
             mature = dt >= 0.4
             moving.append((o, v, speed, mature))
-            if not self.c.get('calibrated'):
+            if not self.c.get('calibrated') or o['class'] not in ROAD_USERS:
                 continue
             road = inside(p, self.c['road'])
             if o['class'] == 'person':
@@ -101,21 +146,17 @@ class RuleEngine:
                     if cosine < -0.65:
                         states[('wrong_way', ident)] = self.c['wrong_way_seconds']
         if self.c.get('calibrated'):
-            self.road_rules.step(moving,t,signals or {})
-            for index, crossing in enumerate(self.c['crosswalks']):
-                people = [o for o,_,_,_ in moving if o['class']=='person' and inside(o['point'],crossing)]
-                for o,_,speed,mature in moving:
-                    key = ('failure_to_yield',o['id'])
-                    trigger = people and mature and speed>self.c['stationary_speed']
-                    if o['class']!='person' and inside(o['point'],crossing) and (trigger or key in self.active):
-                        states[key] = .25
+            road_moving = [x for x in moving if x[0]['class'] in ROAD_USERS]
+            self.road_rules.step(road_moving,t,signals or {})
+            self.yield_rule.step(road_moving,t)
+            self.hazards.step(moving,observations,t)
             # Each configured direction group must have a queue in every lane.
             groups = defaultdict(list)
             for lane in self.c['lanes']:
                 groups[lane.get('group', 'default')].append(lane)
             for group, lanes in groups.items():
                 counts = [sum(o['class'] != 'person' and mature and speed < self.c['stationary_speed']
-                              and inside(o['point'], lane['polygon']) for o, v, speed, mature in moving) for lane in lanes]
+                              and inside(o['point'], lane['polygon']) for o, v, speed, mature in road_moving) for lane in lanes]
                 if counts and min(counts) >= 1 and sum(counts) >= self.c['congestion_min_vehicles']:
                     states[('congestion', group)] = self.c['congestion_seconds']
         for key in list(self.active):
@@ -132,8 +173,8 @@ class RuleEngine:
             self.active[key] = (start, t, threshold)
         risk_tracks = moving
         if self.c.get('calibrated'):
-            risk_tracks = [x for x in moving if inside(x[0]['point'],self.c['road']) and not any(inside(x[0]['point'],p) for p in self.c['excluded_zones'])]
-        return bounded_score(self.risk(risk_tracks)) if self.c.get('risk_enabled') else 0.0
+            risk_tracks = [x for x in moving if x[0]['class'] in ROAD_USERS and inside(x[0]['point'],self.c['road']) and not any(inside(x[0]['point'],p) for p in self.c['excluded_zones'])]
+        return self.risk_state.step(risk_tracks, t) if self.c.get('risk_enabled') and self.c.get('calibrated') else 0.0
 
     @staticmethod
     def risk(moving):
@@ -158,9 +199,10 @@ class RuleEngine:
         return min(1.0, max(0.0, result))
 
     def finish(self, duration):
-        events = list(self.completed) + self.road_rules.finish(duration)
+        events = list(self.completed) + self.road_rules.finish(duration) + self.yield_rule.finish(duration) + self.hazards.finish(duration)
         for (label, _), (start, last, threshold) in self.active.items():
             end = duration if duration-last <= 1/self.c['sample_fps'] + .05 else last
             if end-start >= threshold:
                 events.append([start, end, label])
+        self.raw_events = events
         return merge_events(events, duration, self.c['merge_gap_seconds'], self.c['min_event_seconds'])

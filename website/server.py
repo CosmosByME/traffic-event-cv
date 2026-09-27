@@ -20,8 +20,8 @@ from src.config import load_config, validate_config
 
 MAX_BYTES = 3 * 1024**3
 MAX_SECONDS = 600
-PROFILES = {'camera.json': 'New camera · configure before detecting events',
-            'C3896.draft.json': 'C3896 intersection · draft calibration'}
+PROFILES = {'camera.json': 'C3896 intersection · reviewed geometry v1',
+            'uncalibrated.json': 'Other camera · configure before detecting events'}
 
 
 class Jobs:
@@ -109,7 +109,7 @@ class Jobs:
             cap.release()
         data = analyze(path,job['config'],lambda p:self.update(token,progress=round(p*100)))
         validate_prediction(data['events'],data['risk'],data['meta']['duration'])
-        predictions = {k:data[k] for k in ('events','risk')}
+        predictions = {k:data[k] for k in ('events','risk','risk_columns','risk_summary')}
         (folder/'predictions.json').write_text(json.dumps(predictions,allow_nan=False))
         with (folder/'risk.csv').open('w') as out:
             out.write('timestamp_seconds,score_0_to_1\n')
@@ -159,6 +159,7 @@ class Info(API):
         self.write(dict(max_bytes=MAX_BYTES,max_seconds=MAX_SECONDS,profiles=[
             dict(id=name,label=label,config=load_config(ROOT/'configs'/name)) for name,label in PROFILES.items()],
             team=team,weights_ready=(ROOT/'weights/yolo11n.pt').is_file(),
+            fire_weights_ready=(ROOT/'weights/fire_smoke_yolov8.pt').is_file(),
             browser_export=bool(shutil.which('ffmpeg'))))
 
 

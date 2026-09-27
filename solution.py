@@ -32,10 +32,14 @@ class RiskEstimator:
         if self.detector is None:
             from src.pipeline import Detector
             from src.events import RuleEngine
-            self.detector = Detector(self.config)
-            self.engine = RuleEngine(self.config)
+            # Part B uses only its own causal road-user tracks, never Part A or
+            # a fire/obstacle detector. Avoid doubling specialist inference.
+            risk_config = dict(self.config,fire_smoke_enabled=False,obstacle_detection_enabled=False,
+                               collision_rules_enabled=False)
+            self.detector = Detector(risk_config)
+            self.engine = RuleEngine(risk_config)
         raw = self.engine.step(self.detector.step(frame), t_sec)
         dt = t_sec-self.last_sample if self.last_sample != float('-inf') else 1/self.config['sample_fps']
         self.score = smooth_score(self.score,raw,dt)
         self.last_sample = t_sec
-        return self.score
+        return bounded_score(self.score)

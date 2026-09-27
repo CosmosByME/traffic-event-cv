@@ -1,0 +1,4 @@
+# Keep organizer files byte-identical on Windows too.
+/run_submission.py text eol=lf
+/evaluate.py text eol=lf
+/weights/*.pt binary
