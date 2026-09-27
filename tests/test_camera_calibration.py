@@ -28,6 +28,22 @@ class CameraCalibrationTest(unittest.TestCase):
         for key in ('signals', 'stop_lines', 'solid_lines', 'turn_rules'):
             self.assertEqual(self.c[key], [])
 
+    def test_screenshot_reviewed_approach_markings(self):
+        self.assertEqual(len(self.c['lanes']), 4)
+        self.assertEqual(len(self.c['calibration']['observed_solid_lines']), 3)
+        self.assertEqual(self.c['calibration']['screenshot_crop'], [0, 138, 2560, 1578])
+        self.assertEqual(self.c['calibration']['version'], 2)
+
+    def test_shifted_view_has_separate_geometry(self):
+        shifted = load_config(ROOT / 'configs/C3896.shifted.json')
+        self.assertNotEqual(shifted['crosswalks'], self.c['crosswalks'])
+        # Bottom-center of the same refuge in each 1280x720 reference view.
+        self.assertTrue(any(inside([380/1280, 510/720], p) for p in shifted['excluded_zones']))
+        self.assertFalse(inside([225/1280, 451/720], self.c['crosswalks'][0]))
+        self.assertTrue(inside([225/1280, 451/720], shifted['crosswalks'][0]))
+        self.assertEqual(shifted['signals'], [])
+        self.assertEqual(shifted['lanes'], [])
+
     def test_signal_queue_is_not_a_stopped_vehicle(self):
         engine = RuleEngine(self.c)
         point = [550/1280, 315/720]

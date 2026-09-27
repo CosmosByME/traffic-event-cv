@@ -1,5 +1,20 @@
 # Implementation status — HTML website and event tracking
 
+## Clear-screenshot calibration v2 (supersedes v1 geometry notes)
+
+Reviewed the three user-provided 2560x1662 screenshots after excluding player
+borders. First two align with C3896; the third shows different framing despite
+the same physical camera. Default geometry now has refined crossing boundaries,
+four near-side lane cores and three measured (inactive) solid-divider segments. A separate
+configs/C3896.shifted.json stores the third view's road/crosswalk/refuge regions;
+it is not automatically selected and its source video mapping is still unknown.
+Signal ownership and prohibited turns remain unverified/disabled. See
+samples/camera.md for exact coordinate conventions and limitations. Do not apply
+the default profile indiscriminately to shifted-view videos.
+62 tests pass for this update; the saved-track output passes official format
+validation. This is not evidence of event accuracy. Solid-line measurements are
+stored but inactive after a replay exposed implausibly long merged events.
+
 ## Submission packaging update (supersedes packaging notes below)
 
 Official run_submission.py and evaluate.py are now included byte-for-byte at the

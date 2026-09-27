@@ -95,9 +95,9 @@ These are event candidates, not verified legal findings. Finite geometry, contac
 .venv/bin/python dev_run.py --videos samples --camera configs/C3896.json --out predictions_samples.json --render
 ```
 
-Reviewed C3896 geometry includes road boundaries, three crossings, refuge/curb exclusions, the signal queue approach and three near-side lane cores. The curb car is no longer inside the far crossing. Signal ownership, solid-line rules and prohibited turns remain unset; their dependent rules are disabled. Lane coverage is partial and event accuracy is unvalidated. See samples/camera.md for observations and limitations. The old C3896.draft.json is retained only as a historical comparison.
+Reviewed C3896 v2 geometry includes road boundaries, three crossings, refuge/curb exclusions, the signal queue approach, four near-side lane cores and three measured (inactive) solid-divider segments. The curb car is no longer inside the far crossing. Signal ownership and prohibited turns remain unset; their dependent rules are disabled. Measured solid lines remain inactive after replay exposed implausibly long candidates. Lane coverage is partial and event accuracy is unvalidated. See samples/camera.md for observations and limitations. The old C3896.draft.json is retained only as a historical comparison.
 
-The official interface now uses the matching C3896 geometry in configs/camera.json by default. TRAFFIC_CAMERA can override it. Generate review overlays with `python scripts/preview_camera.py --video samples/C3896.MP4`. Ensure packaged configuration and regenerated predictions_samples.json agree before submission.
+The official interface uses C3896 daytime-framing geometry in configs/camera.json by default. The third supplied screenshot shows shifted framing; configs/C3896.shifted.json is a separate manual profile, not automatically selected. Same physical camera does not guarantee identical framing. Verify the source video before choosing a profile; do not choose by darkness alone. TRAFFIC_CAMERA can override it. Generate review overlays with `python scripts/preview_camera.py --video samples/C3896.MP4`. Ensure packaged configuration and regenerated predictions_samples.json agree before submission.
 
 To iterate quickly using existing saved detections:
 
