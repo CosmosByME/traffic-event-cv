@@ -1,5 +1,15 @@
 # Implementation status — HTML website and event tracking
 
+## Local annotated-video CLI
+
+`python run.py --videos samples` now creates outputs/predictions.json and an
+annotated MP4 for every input using the existing website analyzer/renderer.
+The website, shared inference/rendering code and official runner are unchanged
+by this addition. Local JSON is checkpointed per video, render errors preserve
+predictions, and existing outputs require explicit --overwrite. Green/orange
+box colors were checked in an actual encoded-video regression test with controlled
+detections. This local single-pass workflow is not the official timed A+B run.
+
 ## Clear-screenshot calibration v2 (supersedes v1 geometry notes)
 
 Reviewed the three user-provided 2560x1662 screenshots after excluding player

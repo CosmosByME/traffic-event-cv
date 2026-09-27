@@ -12,7 +12,7 @@ def main():
     files = [ROOT/name for name in (
         '.gitignore', '.gitattributes', '.dockerignore', 'solution.py',
         'run_submission.py', 'evaluate.py', 'requirements.txt', 'Dockerfile',
-        'README.md', 'STATUS.md', 'predictions_samples.json', 'dev_run.py',
+        'README.md', 'STATUS.md', 'predictions_samples.json', 'dev_run.py', 'run.py',
         'samples/camera.md', 'weights/SHA256SUMS', 'weights/MODELS.md',
         'weights/download.sh', 'weights/yolo11n.pt', 'weights/fire_smoke_yolov8.pt')]
     for directory, suffixes in (
