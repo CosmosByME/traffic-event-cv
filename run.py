@@ -23,7 +23,7 @@ def main(argv=None):
     parser.add_argument('--videos', type=Path, required=True, help='MP4 file or folder of MP4 files')
     parser.add_argument('--out-dir', type=Path, default=Path('outputs'))
     parser.add_argument('--camera', type=Path, help='Override the default camera profile')
-    parser.add_argument('--team', default='unnamed-team')
+    parser.add_argument('--team', default='JAM')
     parser.add_argument('--overwrite', action='store_true', help='Replace this run’s existing output files')
     args = parser.parse_args(argv)
     source = args.videos
